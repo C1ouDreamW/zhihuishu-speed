@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>智慧树进度接口探针</title>
+<style>
+  body{font:13px/1.7 "Microsoft YaHei",Consolas,monospace;padding:20px;background:#0f1115;color:#dfe6f0}
+  h2{color:#7fb0ff;font-size:16px;margin:18px 0 8px}
+  pre{background:#181c24;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-all;border:1px solid #242a36}
+  .k{color:#7fb0ff} .s{color:#8ee08e} .w{color:#ffb454} .e{color:#ff7b72}
+</style>
+</head>
+<body>
+<h2>说明</h2>
+<pre>
+把本文件的 <span class="k">&lt;script&gt;</span> 段整体复制到播放页的控制台（F12 → Console → 粘贴 → 回车），
+然后正常播放 30 秒以上，观察下面拦截到的请求。
+</pre>
+<h2>探针脚本</h2>
+<pre id="code">
+// ===== 智慧树学习进度探针 =====
+(function(){
+  const KEY = ['studyTime','currTime','currentTime','totalTime','saveStudy','updateStudy',
+               'record','progress','learnTime','playTime','watchTime','heartbeat','log','duration'];
+  const seen = new Set();
+
+  function interesting(url){
+    const u = String(url);
+    return /zhihuishu|polymas/i.test(u) && KEY.some(k => u.toLowerCase().includes(k.toLowerCase()));
+  }
+  function short(url){ return String(url).replace(/^https?:\/\/[^/]+/, ''); }
+
+  // --- 拦截 XHR ---
+  const XO = XMLHttpRequest.prototype.open;
+  const XS = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function(m, u){ this.__u = u; this.__m = m; return XO.apply(this, arguments); };
+  XMLHttpRequest.prototype.send = function(body){
+    if (interesting(this.__u)) {
+      const t0 = performance.now();
+      this.addEventListener('load', () => {
+        const line = `[XHR ${this.__m}] ${short(this.__u)}\n  → status ${this.status}\n  payload: ${String(body||'').slice(0,300)}\n  resp: ${String(this.responseText||'').slice(0,200)}`;
+        push(line);
+      });
+    }
+    return XS.apply(this, arguments);
+  };
+
+  // --- 拦截 fetch ---
+  const OF = window.fetch;
+  window.fetch = function(input, init){
+    const url = typeof input === 'string' ? input : (input && input.url);
+    if (interesting(url)) {
+      const body = init && init.body ? String(init.body) : '';
+      console.log('[fetch]', short(url), body.slice(0,300));
+    }
+    return OF.apply(this, arguments);
+  };
+
+  // --- 监听视频事件，记录真实播放时长 ---
+  function hookVideo(v){
+    if (v.__probed) return; v.__probed = true;
+    let played = 0, last = null;
+    v.addEventListener('timeupdate', () => {
+      if (last !== null && !v.paused) {
+        const d = v.currentTime - last;
+        if (d > 0 && d < 2) played += d;
+      }
+      last = v.currentTime;
+    });
+    v.addEventListener('ratechange', () => push(`[video] ratechange → ${v.playbackRate}x`));
+    window.__probe.played = () => played;
+    push(`[video] 发现元素 id=${v.id||'-'} duration=${v.duration||'?'} rate=${v.playbackRate}`);
+  }
+  const t = setInterval(() => {
+    document.querySelectorAll('video,audio').forEach(hookVideo);
+  }, 1000);
+
+  const lines = [];
+  function push(s){ lines.push(s); render(); }
+  function render(){
+    let pre = document.getElementById('__probe_out');
+    if (!pre) { pre = document.createElement('pre'); pre.id='__probe_out';
+      pre.style.cssText='background:#181c24;color:#dfe6f0;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-all;margin-top:16px;border:1px solid #242a36';
+      document.body.appendChild(pre); }
+    pre.textContent = lines.slice(-40).join('\n\n');
+  }
+
+  window.__probe = { lines, played: () => 0, stop(){ clearInterval(t); } };
+  console.log('%c[探针] 已启动，开始播放视频后看页面底部输出', 'color:#5a8cff;font-weight:700');
+})();
+</pre>
+</body>
+</html>
