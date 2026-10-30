@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>智慧树倍速脚本 · 场景验证页</title>
+  <style>
+    body { font: 14px/1.6 "Microsoft YaHei", sans-serif; padding: 24px; background: #f6f7fb; }
+    video { width: 300px; background: #000; margin-right: 12px; }
+    #out { white-space: pre; background: #fff; padding: 12px; border-radius: 8px; margin-top: 16px; }
+    .ok { color: #0a0; font-weight: 700; } .bad { color: #c00; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h3>场景验证页</h3>
+  <p>模拟：①播放器持续写回 1.5x　②切章节时动态插入新的 video 元素</p>
+  <video id="mediaPlayer" muted playsinline></video>
+  <div id="out">等待测试完成…</div>
+
+  <script>
+    // 模拟平台限速：持续写回 1.5
+    setInterval(function () {
+      var vs = document.querySelectorAll('video');
+      for (var i = 0; i < vs.length; i++) { try { vs[i].playbackRate = 1.5; } catch (e) { } }
+    }, 100);
+  </script>
+
+  <script src="../zhihuishu-speed.user.js"></script>
+
+  <script>
+    var lines = [], fails = 0;
+    function log(s) { lines.push(s); }
+    function check(name, cond, extra) {
+      if (!cond) fails++;
+      log((cond ? '  OK   ' : '  FAIL ') + name + (extra ? '  (' + extra + ')' : ''));
+    }
+
+    // t=1s：设置 2x
+    setTimeout(function () { window.__ZS_SPEED__.set(2); }, 1000);
+
+    // t=2s：模拟切章节，动态插入新的 video
+    setTimeout(function () {
+      var v = document.createElement('video');
+      v.id = 'chapter2';
+      v.muted = true;
+      document.body.insertBefore(v, document.getElementById('out'));
+      log('t=2s  动态插入 #chapter2');
+    }, 2000);
+
+    // t=5s：核心断言
+    setTimeout(function () {
+      var a = document.getElementById('mediaPlayer');
+      var b = document.getElementById('chapter2');
+      check('旧元素保持 2x', Math.abs(a.playbackRate - 2) < 0.001, 'rate=' + a.playbackRate);
+      check('新插入元素自动接管为 2x', Math.abs(b.playbackRate - 2) < 0.001, 'rate=' + b.playbackRate);
+      check('新插入元素已被锁定', !!b.__zsSpeedLock);
+    }, 5000);
+
+    // t=6s：点击面板预设按钮 8x
+    var afterPreset = null;
+    setTimeout(function () {
+      var host = document.getElementById('zs-speed-host');
+      var panel = host && host.shadowRoot.querySelector('.panel');
+      var btn = panel && panel.querySelector('.presets button[data-rate="8"]');
+      if (btn) btn.click();
+      log('t=6s  点击预设 8x');
+    }, 6000);
+    setTimeout(function () {
+      afterPreset = document.getElementById('mediaPlayer').playbackRate;
+    }, 6300);
+
+    // t=7s：快捷键 ']' 加 0.1 → 8.1
+    setTimeout(function () {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: ']', code: 'BracketRight', bubbles: true }));
+      log("t=7s  按下快捷键 ']'");
+    }, 7000);
+
+    // t=8s：断言 + 持久化
+    setTimeout(function () {
+      var a = document.getElementById('mediaPlayer');
+      var b = document.getElementById('chapter2');
+      check('预设按钮生效 (8x)', afterPreset !== null && Math.abs(afterPreset - 8) < 0.001, 'rate=' + afterPreset);
+      check('快捷键生效 (8.1x)', Math.abs(a.playbackRate - 8.1) < 0.001, 'rate=' + a.playbackRate);
+      check('两个元素同步', Math.abs(b.playbackRate - a.playbackRate) < 0.001);
+
+      var saved = null;
+      try { saved = JSON.parse(localStorage.getItem('zs-speed-config')); } catch (e) { }
+      check('配置已持久化', !!saved && Math.abs(saved.rate - 8.1) < 0.001, saved ? 'rate=' + saved.rate : 'null');
+
+      var host = document.getElementById('zs-speed-host');
+      var panel = host && host.shadowRoot.querySelector('.panel');
+      check('面板存在', !!panel);
+      check('Shadow DOM 隔离（面板不在主文档）', !document.querySelector('.panel'));
+      if (panel) log('  标题栏显示: ' + panel.querySelector('.cur').textContent +
+                     ' / 状态: ' + panel.querySelector('.status').textContent);
+
+      document.getElementById('out').innerHTML = lines.join('\n') + '\n\n' +
+        (fails === 0 ? '<span class="ok">全部通过</span>' : '<span class="bad">失败 ' + fails + ' 项</span>');
+      document.title = fails === 0 ? 'RESULT:PASS' : 'RESULT:FAIL';
+    }, 8000);
+  </script>
+</body>
+</html>

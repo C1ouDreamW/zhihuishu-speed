@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>智慧树倍速脚本 · 本地验证页</title>
+  <style>
+    body { font: 14px/1.6 "Microsoft YaHei", sans-serif; padding: 24px; background: #f6f7fb; }
+    video { width: 320px; background: #000; margin-right: 12px; }
+    #out { white-space: pre; background: #fff; padding: 12px; border-radius: 8px; margin-top: 16px; }
+    .ok { color: #0a0; font-weight: 700; }
+    .bad { color: #c00; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h3>本地验证页</h3>
+  <p>模拟智慧树播放器：另一个脚本每 100ms 试图把 playbackRate 改回 1.5（平台限速行为）。</p>
+  <video id="mediaPlayer" muted playsinline></video>
+  <video id="vjs_container_html5_api" muted playsinline></video>
+  <div id="out">等待测试完成…</div>
+
+  <script>
+    // —— 模拟平台限速：持续尝试写回 1.5x ——
+    setInterval(function () {
+      var vs = document.querySelectorAll('video');
+      for (var i = 0; i < vs.length; i++) {
+        try { vs[i].playbackRate = 1.5; } catch (e) { }
+      }
+    }, 100);
+  </script>
+
+  <!-- 被测脚本 -->
+  <script src="../zhihuishu-speed.user.js"></script>
+
+  <script>
+    var lines = [];
+    function log(s) { lines.push(s); }
+
+    setTimeout(function () {
+      window.__ZS_SPEED__.set(2);
+      log('t=1s  已调用 set(2)');
+    }, 1000);
+
+    setTimeout(function () {
+      var vs = document.querySelectorAll('video');
+      var allOk = vs.length > 0;
+      for (var i = 0; i < vs.length; i++) {
+        var v = vs[i];
+        var ok = Math.abs(v.playbackRate - 2) < 0.001;
+        if (!ok) allOk = false;
+        log('t=5s  #' + v.id + '  playbackRate=' + v.playbackRate +
+            '  locked=' + !!v.__zsSpeedLock + '  ' + (ok ? 'OK' : 'FAIL'));
+      }
+      // 面板是否渲染
+      var host = document.getElementById('zs-speed-host');
+      var panel = host && host.shadowRoot && host.shadowRoot.querySelector('.panel');
+      log('面板已渲染: ' + !!panel);
+      if (panel) {
+        log('标题栏倍速: ' + panel.querySelector('.cur').textContent);
+        log('状态栏: ' + panel.querySelector('.status').textContent);
+      }
+      // 解锁后再让页面改倍速，验证解锁生效
+      window.__ZS_SPEED__.lock(false);
+      setTimeout(function () {
+        var v0 = document.querySelector('#mediaPlayer');
+        log('t=5.5s 解锁后 page 写入 1.5 → 实际=' + v0.playbackRate +
+            '  ' + (Math.abs(v0.playbackRate - 1.5) < 0.001 ? 'OK' : 'FAIL'));
+        document.getElementById('out').innerHTML =
+          lines.join('\n') + '\n\n' + (allOk ? '<span class="ok">全部通过</span>' : '<span class="bad">存在失败项</span>');
+        document.title = allOk ? 'RESULT:PASS' : 'RESULT:FAIL';
+      }, 500);
+    }, 5000);
+  </script>
+</body>
+</html>

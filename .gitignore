@@ -1,0 +1,16 @@
+# 第三方版权代码与本地下载产物，不入库
+parsed/
+
+# 依赖
+node_modules/
+package-lock.json
+
+# 本地环境
+.vscode/
+.idea/
+*.log
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
