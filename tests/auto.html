@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>自动播放脚本 · 场景验证</title>
+  <style>
+    body { font: 14px/1.6 "Microsoft YaHei", sans-serif; padding: 20px; background: #f6f7fb; }
+    .main { display: flex; gap: 20px; }
+    .left { flex: 1; }
+    .right { width: 280px; }
+    video { width: 420px; background: #000; display: block; }
+    .file-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; display: flex;
+                 align-items: center; gap: 6px; background: #fff; margin-bottom: 4px; }
+    .file-item.active { background: #dbe8ff; }
+    .status-box { margin-left: auto; font-size: 12px; color: #888; }
+    .icon-video::before { content: "▶ "; color: #3a7; }
+    .icon-work::before { content: "✎ "; color: #a73; }
+    .icon-finish { color: #3a7; font-style: normal; }
+    .icon-finish::before { content: "✔"; }
+    #out { white-space: pre-wrap; background: #fff; padding: 12px; border-radius: 8px;
+           margin-top: 16px; font: 12px/1.7 Consolas, monospace; }
+    .ok { color: #0a0; font-weight: 700; } .bad { color: #c00; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<div class="main">
+  <div class="left">
+    <div id="mediaPlayer"><video id="vjs_mediaPlayer_html5_api" class="vjs-tech" muted playsinline></video></div>
+  </div>
+  <div class="right">
+    <div id="sourceTree">
+      <div id="folder_1" class="folder-item">
+        <div class="folder-box"><span class="folder-name">第一章</span></div>
+        <div id="file_101" class="file-item active" onclick="changeFile(101)">
+          <i class="icon-video"></i><span class="file-name">1.1 视频A</span>
+          <div class="status-box"><span class="rate">30%</span></div>
+        </div>
+        <div id="file_102" class="file-item" onclick="changeFile(102)">
+          <i class="icon-video"></i><span class="file-name">1.2 视频B</span>
+          <div class="status-box"><span class="rate">12%</span></div>
+        </div>
+        <div id="file_103" class="file-item" onclick="changeFile(103)">
+          <i class="icon-video"></i><span class="file-name">1.3 视频C(已完成)</span>
+          <div class="status-box"><i class="icon-finish"></i></div>
+        </div>
+        <div id="file_104" class="file-item" onclick="changeFile(104)">
+          <i class="icon-work"></i><span class="file-name">1.4 作业(非视频)</span>
+          <div class="status-box"></div>
+        </div>
+      </div>
+      <div id="folder_2" class="folder-item">
+        <div class="folder-box"><span class="folder-name">第二章</span></div>
+        <div id="file_201" class="file-item" onclick="changeFile(201)">
+          <i class="icon-video"></i><span class="file-name">2.1 视频D</span>
+          <div class="status-box"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="hidden" id="fileId" value="101">
+<div id="out">等待测试…</div>
+
+<script>
+  // 模拟页面结构，记录跳转
+  window.__nav = [];
+  window.changeFile = function (id) {
+    window.__nav.push(String(id));
+    console.log('[page] changeFile ->', id);
+    document.getElementById('fileId').value = String(id);
+  };
+
+  // 真实 3 秒视频（MediaRecorder 生成），有明确 duration 才会触发 ended
+  (function () {
+    var v = document.getElementById('vjs_mediaPlayer_html5_api');
+    v.src = './sample.webm';
+    v.load();
+  })();
+</script>
+
+<script src="../zhihuishu-auto.user.js"></script>
+
+<script>
+  var lines = [], fails = 0;
+  function check(name, cond, extra) {
+    if (!cond) fails++;
+    lines.push((cond ? '  OK   ' : '  FAIL ') + name + (extra ? '  (' + extra + ')' : ''));
+  }
+  function log(s) { lines.push(s); }
+
+  // 缩短随机等待，方便测试（直接改脚本内部配置）
+  setTimeout(function () {
+    var A = window.__ZS_AUTO__;
+    if (!A) { log('脚本未加载'); done(); return; }
+    A.cfg.startDelayMin = 0.2; A.cfg.startDelayMax = 0.4;
+    A.cfg.switchDelayMin = 0.3; A.cfg.switchDelayMax = 0.6;
+    A.cfg.resumeDelayMin = 0.2; A.cfg.resumeDelayMax = 0.4;
+    A.cfg.wander = false;
+    log('已缩短延迟用于测试');
+  }, 300);
+
+  // t=2s：检查是否自动开始播放
+  setTimeout(function () {
+    var v = document.querySelector('video');
+    check('自动播放已开始', !v.paused, 'paused=' + v.paused);
+  }, 2000);
+
+  // t=6s：视频应播完并触发切换
+  setTimeout(function () {
+    check('播完后触发了切换', window.__nav.length > 0, 'nav=[' + window.__nav.join(',') + ']');
+    check('切换目标是 102', window.__nav[0] === '102', '实际=' + window.__nav[0]);
+    done();
+  }, 7000);
+
+  function done() {
+    var A = window.__ZS_AUTO__;
+    if (A) {
+      check('面板已渲染', !!document.getElementById('zs-auto-host'));
+      check('Shadow DOM 隔离', !document.querySelector('.panel'));
+      var fs = A.getState().files;
+      check('识别到文件列表', fs.length === 5, '共 ' + fs.length + ' 项');
+      var videos = fs.filter(function (f) { return f.video; });
+      check('视频项识别正确', videos.length === 4, '视频 ' + videos.length + ' 项');
+      var doneItems = fs.filter(function (f) { return f.done; });
+      check('已完成项识别正确', doneItems.length === 1, '完成 ' + doneItems.length + ' 项');
+    }
+    var out = document.getElementById('out');
+    out.innerHTML = lines.join('\n') + '\n\n' +
+      (fails === 0 ? '<span class="ok">全部通过</span>' : '<span class="bad">失败 ' + fails + ' 项</span>');
+    document.title = fails === 0 ? 'RESULT:PASS' : 'RESULT:FAIL';
+  }
+</script>
+
+</body>
+</html>
