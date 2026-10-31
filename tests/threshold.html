@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>阈值功能验证</title>
+  <style>
+    body { font: 14px/1.6 "Microsoft YaHei", sans-serif; padding: 20px; background: #f6f7fb; }
+    video { width: 420px; background: #000; display: block; }
+    .file-item { padding: 6px 8px; border-radius: 6px; display: flex; align-items: center;
+                 gap: 6px; background: #fff; margin-bottom: 4px; }
+    .file-item.active { background: #dbe8ff; }
+    .status-box { margin-left: auto; font-size: 12px; color: #888; }
+    .icon-video::before { content: "▶ "; color: #3a7; }
+    .icon-finish::before { content: "✔"; color: #3a7; }
+    #out { white-space: pre-wrap; background: #fff; padding: 12px; border-radius: 8px;
+           margin-top: 16px; font: 12px/1.7 Consolas, monospace; }
+    .ok { color: #0a0; font-weight: 700; } .bad { color: #c00; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<div id="mediaPlayer"><video id="vjs_mediaPlayer_html5_api" class="vjs-tech" muted playsinline src="./sample.webm"></video></div>
+
+<div id="sourceTree">
+  <div id="file_101" class="file-item active" onclick="changeFile(101)">
+    <i class="icon-video"></i><span class="file-name">1.1 视频A</span>
+    <div class="status-box"><span class="rate">30%</span></div>
+  </div>
+  <div id="file_102" class="file-item" onclick="changeFile(102)">
+    <i class="icon-video"></i><span class="file-name">1.2 视频B</span>
+    <div class="status-box"></div>
+  </div>
+</div>
+
+<input type="hidden" id="fileId" value="101">
+<div id="out">等待测试…</div>
+
+<script>
+  window.__nav = [];
+  window.__switchPct = null;
+  window.changeFile = function (id) {
+    window.__nav.push(String(id));
+    // 记录切换时的播放百分比
+    var v = document.querySelector('video');
+    if (v && v.duration > 0) window.__switchPct = (v.currentTime / v.duration * 100).toFixed(1);
+  };
+</script>
+
+<script src="../zhihuishu-auto.user.js"></script>
+
+<script>
+  var lines = [], fails = 0;
+  function check(name, cond, extra) {
+    if (!cond) fails++;
+    lines.push((cond ? '  OK   ' : '  FAIL ') + name + (extra ? '  (' + extra + ')' : ''));
+  }
+
+  var switchPct = null;   // 切换时的播放百分比
+
+  setTimeout(function () {
+    var A = window.__ZS_AUTO__;
+    if (!A) { document.getElementById('out').textContent = '脚本未加载'; return; }
+
+    // 缩短延迟
+    A.cfg.startDelayMin = 0.2; A.cfg.startDelayMax = 0.3;
+    A.cfg.switchDelayMin = 0.2; A.cfg.switchDelayMax = 0.4;
+    A.cfg.resumeDelayMin = 0.2; A.cfg.resumeDelayMax = 0.3;
+    A.cfg.wander = false;
+
+    // 检查阈值滑块存在
+    var sr = document.getElementById('zs-auto-host').shadowRoot;
+    var slider = sr.querySelector('.thresh-slider');
+    var val = sr.querySelector('.thresh-val');
+    check('阈值滑块存在', !!slider);
+    check('阈值滑块范围 50-100', slider.min === '50' && slider.max === '100', 'min=' + slider.min + ' max=' + slider.max);
+
+    // 用滑块设置 60%（触发 input 事件才会 render）
+    slider.value = '60';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    check('阈值设置为 60%', val.textContent === '60%', '实际=' + val.textContent);
+    check('配置已更新', A.cfg.threshold === 60, '实际=' + A.cfg.threshold);
+
+    // 滑块交互：改到 90%
+    slider.value = '90';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    check('滑块改到 90% 后配置更新', A.cfg.threshold === 90, '实际=' + A.cfg.threshold);
+    check('滑块值显示更新', val.textContent === '90%', '实际=' + val.textContent);
+
+    // 改回 60% 继续测试
+    slider.value = '60';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    check('滑块改回 60%', A.cfg.threshold === 60, '实际=' + A.cfg.threshold);
+  }, 300);
+
+  // t=2s：开始播放
+  setTimeout(function () {
+    var v = document.querySelector('video');
+    check('自动播放已开始', !v.paused, 'paused=' + v.paused);
+  }, 2000);
+
+  // t=6s：应该已经切换（60% of 3s = 1.8s，加上延迟应该在 5s 内完成）
+  setTimeout(function () {
+    var v = document.querySelector('video');
+    check('60% 阈值下已切换', window.__nav.length > 0, 'nav=[' + window.__nav.join(',') + ']');
+    check('切换目标是 102', window.__nav[0] === '102', '实际=' + window.__nav[0]);
+    // 阈值 60% 意味着视频播到 ~60% 就切了，不是 100%
+    check('切换时在阈值附近（≤85%）', window.__switchPct !== null && parseFloat(window.__switchPct) <= 85,
+          '切换时=' + window.__switchPct + '%');
+  }, 8000);
+
+  function done() {
+    document.getElementById('out').innerHTML = lines.join('\n') + '\n\n' +
+      (fails === 0 ? '<span class="ok">全部通过</span>' : '<span class="bad">失败 ' + fails + ' 项</span>');
+    document.title = fails === 0 ? 'RESULT:PASS' : 'RESULT:FAIL';
+  }
+
+  setTimeout(done, 10000);
+</script>
+
+</body>
+</html>

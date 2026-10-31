@@ -25,6 +25,7 @@
 
   var DEFAULTS = {
     running: true,
+    threshold: 80,          // 完成阈值（%），播到这个百分比就切下一个
     // 进入页面后多久开始播（秒）
     startDelayMin: 3,
     startDelayMax: 12,
@@ -203,9 +204,11 @@
     try {
       if (v.ended) return true;
       var d = v.duration;
-      if (isFinite(d) && d > 0 && v.currentTime >= d - 0.6) return true;
-    } catch (e) { /* 忽略 */ }
-    return false;
+      if (!isFinite(d) || d <= 0) return false;
+      // 阈值 100% 时用 duration-0.6 作为安全边距（有些视频不干净地触发 ended）
+      var ratio = cfg.threshold >= 100 ? (d - 0.6) / d : cfg.threshold / 100;
+      return v.currentTime >= d * ratio;
+    } catch (e) { return false; }
   }
 
   function fmtTime(sec) {
@@ -228,6 +231,11 @@
 
     v.addEventListener('ended', function () {
       if (cfg.running && !state.switching) handleFinished('ended 事件');
+    });
+
+    // timeupdate 频率高（~250ms），比 tick 间隔更及时触发阈值判断
+    v.addEventListener('timeupdate', function () {
+      if (cfg.running && !state.switching && isFinished(v)) handleFinished('达到阈值');
     });
 
     v.addEventListener('pause', scheduleResume);
@@ -506,6 +514,10 @@
     '.btn-mini:hover{opacity:1;background:rgba(255,255,255,.16)}',
     '.grow{flex:1}',
     '.info{background:rgba(255,255,255,.04);border-radius:8px;padding:7px 9px;margin-bottom:8px}',
+    '.thresh-row{display:flex;align-items:center;gap:7px;margin-bottom:8px}',
+    '.thresh-label{color:#7c8aa5;font-size:11px;flex:none;width:48px}',
+    '.thresh-slider{flex:1;accent-color:#60a5fa;height:4px;cursor:pointer}',
+    '.thresh-val{color:#93c5fd;font-size:11.5px;font-weight:700;min-width:32px;text-align:right;flex:none}',
     '.kv{display:flex;gap:6px;margin-bottom:3px;font-size:11.5px;line-height:1.5}',
     '.kv:last-child{margin-bottom:0}',
     '.k{color:#7c8aa5;flex:none;width:36px}',
@@ -548,6 +560,11 @@
       '    <button class="btn-reset" title="清零计数器">↺</button>',
       '    <span class="grow"></span>',
       '  </div>',
+      '  <div class="thresh-row">',
+      '    <span class="thresh-label">完成阈值</span>',
+      '    <input type="range" min="50" max="100" step="5" value="80" class="thresh-slider">',
+      '    <span class="thresh-val">80%</span>',
+      '  </div>',
       '  <div class="info">',
       '    <div class="kv"><span class="k">当前</span><span class="v cur">-</span></div>',
       '    <div class="kv"><span class="k">进度</span><span class="v prog">-</span></div>',
@@ -565,6 +582,8 @@
     els.run = panel.querySelector('.btn-run');
     els.wander = panel.querySelector('.btn-wander');
     els.reset = panel.querySelector('.btn-reset');
+    els.threshSlider = panel.querySelector('.thresh-slider');
+    els.threshVal = panel.querySelector('.thresh-val');
     els.cur = panel.querySelector('.cur');
     els.prog = panel.querySelector('.prog');
     els.next = panel.querySelector('.next');
@@ -600,6 +619,12 @@
       resetCount();
       log('计数器已清零');
       updateUI();
+    });
+
+    els.threshSlider.addEventListener('input', function () {
+      cfg.threshold = parseInt(els.threshSlider.value, 10) || 80;
+      saveCfg();
+      render();
     });
 
     initDrag(panel, panel.querySelector('.head'));
@@ -683,6 +708,10 @@
     els.wander.classList.toggle('on', !!cfg.wander);
     els.count.textContent = String(sessionCount);
     els.count.classList.toggle('zero', sessionCount === 0);
+    if (els.threshSlider) {
+      els.threshSlider.value = String(cfg.threshold);
+      els.threshVal.textContent = cfg.threshold + '%';
+    }
     if (uiStatus) els.status.textContent = uiStatus;
   }
 
@@ -703,7 +732,8 @@
       els.prog.textContent = '切换中…';
     } else if (v && isFinite(v.duration) && v.duration > 0) {
       var pct = Math.min(100, Math.floor(v.currentTime / v.duration * 100));
-      els.prog.textContent = fmtTime(v.currentTime) + ' / ' + fmtTime(v.duration) + '  (' + pct + '%)'
+      els.prog.textContent = fmtTime(v.currentTime) + ' / ' + fmtTime(v.duration)
+        + '  (' + pct + '% / ' + cfg.threshold + '%)'
         + (v.paused ? '  已暂停' : '  播放中');
     } else if (cur) {
       els.prog.textContent = cur.done ? '已完成' : (cur.pct ? cur.pct + '%' : '未开始');
