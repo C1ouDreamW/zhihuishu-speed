@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>面板结构验证</title></head>
+<body>
+<div id="mediaPlayer"><video id="vjs_mediaPlayer_html5_api" class="vjs-tech" muted playsinline></video></div>
+<div id="sourceTree">
+  <div id="file_101" class="file-item active" onclick="changeFile(101)">
+    <i class="icon-video"></i><span class="file-name">1.1 视频A</span>
+    <div class="status-box"><span class="rate">30%</span></div>
+  </div>
+  <div id="file_102" class="file-item" onclick="changeFile(102)">
+    <i class="icon-video"></i><span class="file-name">1.2 视频B</span>
+    <div class="status-box"></div>
+  </div>
+</div>
+<input type="hidden" id="fileId" value="101">
+<div id="out">…</div>
+
+<script>
+  window.__nav = [];
+  window.changeFile = function (id) { window.__nav.push(String(id)); };
+</script>
+
+<script src="../zhihuishu-auto.user.js"></script>
+
+<script>
+  var lines = [], fails = 0;
+  function check(name, cond, extra) {
+    if (!cond) fails++;
+    lines.push((cond ? '  OK   ' : '  FAIL ') + name + (extra ? '  (' + extra + ')' : ''));
+  }
+
+  setTimeout(function () {
+    var A = window.__ZS_AUTO__;
+    if (!A) { document.getElementById('out').textContent = '脚本未加载'; return; }
+
+    var host = document.getElementById('zs-auto-host');
+    var sr = host && host.shadowRoot;
+    if (!sr) { check('Shadow DOM 存在', false); done(); return; }
+
+    // 面板元素
+    check('面板存在', !!sr.querySelector('.panel'));
+    check('计数器 badge', !!sr.querySelector('.count'));
+    check('运行按钮', !!sr.querySelector('.btn-run'));
+    check('随机按钮', !!sr.querySelector('.btn-wander'));
+    check('重置按钮', !!sr.querySelector('.btn-reset'));
+    check('最小化按钮', !!sr.querySelector('.btn-mini'));
+    check('信息区块', !!sr.querySelector('.info'));
+    check('当前显示', !!sr.querySelector('.cur'));
+    check('进度显示', !!sr.querySelector('.prog'));
+    check('下一个显示', !!sr.querySelector('.next'));
+    check('状态栏', !!sr.querySelector('.status'));
+    check('日志区', !!sr.querySelector('.logs'));
+
+    // 计数器初始值
+    check('计数器初始为 0', sr.querySelector('.count').textContent === '0', '实际=' + sr.querySelector('.count').textContent);
+
+    // 最小化按钮点击
+    var mini = sr.querySelector('.btn-mini');
+    mini.click();
+    check('点击最小化后 body 隐藏', sr.querySelector('.panel').classList.contains('mini'));
+    mini.click();
+    check('再点展开后 body 显示', !sr.querySelector('.panel').classList.contains('mini'));
+
+    // 运行按钮点击
+    var run = sr.querySelector('.btn-run');
+    var wasRunning = A.cfg.running;
+    run.click();
+    check('点击运行按钮切换状态', A.cfg.running !== wasRunning, '现在=' + A.cfg.running);
+    run.click(); // 恢复
+
+    // 重置按钮点击
+    sessionStorage.setItem('zs-auto-count', '99');
+    sr.querySelector('.btn-reset').click();
+    check('重置按钮清零计数器', sr.querySelector('.count').textContent === '0', '实际=' + sr.querySelector('.count').textContent);
+
+    done();
+  }, 2500);
+
+  function done() {
+    document.getElementById('out').innerHTML = lines.join('\n') + '\n\n' +
+      (fails === 0 ? '<span class="ok">全部通过</span>' : '<span class="bad">失败 ' + fails + ' 项</span>');
+    document.title = fails === 0 ? 'RESULT:PASS' : 'RESULT:FAIL';
+  }
+</script>
+</body>
+</html>

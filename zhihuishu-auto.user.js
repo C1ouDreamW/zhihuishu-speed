@@ -288,6 +288,22 @@
     lastNote: ''
   };
 
+  // 会话级计数：跨页面跳转保留，刷新后清零
+  var sessionCount = (function () {
+    try { return parseInt(sessionStorage.getItem('zs-auto-count') || '0', 10) || 0; }
+    catch (e) { return 0; }
+  })();
+
+  function incrementCount() {
+    sessionCount++;
+    try { sessionStorage.setItem('zs-auto-count', String(sessionCount)); } catch (e) { /* 忽略 */ }
+  }
+
+  function resetCount() {
+    sessionCount = 0;
+    try { sessionStorage.setItem('zs-auto-count', '0'); } catch (e) { /* 忽略 */ }
+  }
+
   function log(msg, level) {
     state.lastNote = msg;
     addLog(msg, level);
@@ -352,7 +368,6 @@
     if (!file) return false;
     state.switching = true;
     setStatus('切换到：' + file.name);
-    log('切换到「' + file.name + '」');
 
     // 折叠状态先展开，保证元素可交互
     expandFoldersOf(file.el);
@@ -383,7 +398,9 @@
     if (state.switching) return;
     state.switching = true;
 
-    setStatus('已播完，准备切换');
+    incrementCount();
+    setStatus('已播完（第 ' + sessionCount + ' 个），准备切换');
+    render();
     log('当前视频' + (reason || '已播放完毕'));
 
     var delay = jitter(randMs(cfg.switchDelayMin, cfg.switchDelayMax), 0.3);
@@ -398,6 +415,7 @@
       log('所有视频都已完成，停止', 'warn');
       return;
     }
+    log('切换到「' + next.name + '」', 'ok');
     gotoFile(next);
   }
 
@@ -454,33 +472,53 @@
 
   var STYLE = [
     ':host{all:initial}',
-    '.panel{position:fixed;z-index:2147483646;width:250px;box-sizing:border-box;',
-    ' font:12px/1.55 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#e9eef7;',
-    ' background:rgba(22,26,36,.95);border:1px solid rgba(120,170,255,.26);border-radius:10px;',
-    ' box-shadow:0 10px 28px rgba(0,0,0,.45);user-select:none;overflow:hidden}',
-    '.head{display:flex;align-items:center;gap:6px;padding:7px 9px;cursor:move;',
-    ' background:linear-gradient(180deg,rgba(90,140,255,.20),rgba(90,140,255,.04))}',
-    '.dot{width:7px;height:7px;border-radius:50%;background:#59d18c;flex:none;box-shadow:0 0 6px #59d18c}',
-    '.dot.off{background:#8a93a6;box-shadow:none}',
-    '.dot.wait{background:#ffb454;box-shadow:0 0 6px #ffb454}',
-    '.title{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-    '.body{padding:8px 10px 10px;display:block}',
+    '.panel{position:fixed;z-index:2147483646;width:252px;box-sizing:border-box;',
+    ' font:12px/1.55 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#e2e8f5;',
+    ' background:rgba(20,24,34,.96);border:1px solid rgba(120,170,255,.24);border-radius:12px;',
+    ' box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 4px rgba(0,0,0,.3);user-select:none;overflow:hidden}',
+    '.head{display:flex;align-items:center;gap:7px;padding:9px 10px;cursor:move;',
+    ' background:linear-gradient(135deg,rgba(90,140,255,.18),rgba(90,140,255,.05))}',
+    '.dot{width:8px;height:8px;border-radius:50%;background:#4ade80;flex:none;transition:.3s}',
+    '.dot.off{background:#64748b}',
+    '.dot.wait{background:#fbbf24;animation:pulse 1.2s ease-in-out infinite}',
+    '@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}',
+    '.title{flex:1;font-weight:600;font-size:12.5px;letter-spacing:.3px}',
+    '.count{font-size:11px;font-weight:700;background:rgba(90,140,255,.35);color:#93c5fd;',
+    ' border-radius:10px;padding:1px 8px;min-width:20px;text-align:center;flex:none;',
+    ' transition:.2s}',
+    '.count.zero{opacity:.35;background:rgba(255,255,255,.08);color:#94a3b8}',
+    '.body{padding:6px 10px 10px;display:block}',
     '.panel.mini .body{display:none}',
-    '.row{display:flex;align-items:center;gap:6px;margin-bottom:7px}',
-    'button{font:inherit;color:inherit;cursor:pointer;border-radius:6px;',
-    ' border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);padding:3px 9px;transition:.15s}',
-    'button:hover{background:rgba(255,255,255,.14)}',
-    'button.on{background:rgba(90,140,255,.32);border-color:rgba(120,170,255,.6);color:#cfe2ff}',
+    '.row{display:flex;align-items:center;gap:5px;margin-bottom:8px}',
+    'button{font:inherit;color:inherit;cursor:pointer;border-radius:7px;',
+    ' border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);padding:4px 10px;',
+    ' transition:.15s;font-size:11.5px;white-space:nowrap}',
+    'button:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.22)}',
+    'button:active{transform:scale(.96)}',
+    '.btn-run{font-weight:600;min-width:72px}',
+    '.btn-run.on{background:rgba(34,197,94,.22);border-color:rgba(34,197,94,.45);color:#86efac}',
+    '.btn-run:not(.on){background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.4);color:#fca5a5}',
+    '.btn-wander.on{background:rgba(168,85,247,.22);border-color:rgba(168,85,247,.45);color:#d8b4fe}',
+    '.btn-wander:not(.on){opacity:.5}',
+    '.btn-reset{opacity:.6;padding:4px 8px}',
+    '.btn-reset:hover{opacity:1;background:rgba(251,191,36,.18);border-color:rgba(251,191,36,.4)}',
+    '.btn-mini{opacity:.5;padding:2px 7px;font-size:14px;line-height:1.2;min-width:24px}',
+    '.btn-mini:hover{opacity:1;background:rgba(255,255,255,.16)}',
     '.grow{flex:1}',
-    '.kv{display:flex;gap:6px;margin-bottom:3px;font-size:11.5px}',
-    '.k{color:#8a93a6;flex:none;width:38px}',
+    '.info{background:rgba(255,255,255,.04);border-radius:8px;padding:7px 9px;margin-bottom:8px}',
+    '.kv{display:flex;gap:6px;margin-bottom:3px;font-size:11.5px;line-height:1.5}',
+    '.kv:last-child{margin-bottom:0}',
+    '.k{color:#7c8aa5;flex:none;width:36px}',
     '.v{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.status{color:#9aa6bd;font-size:11px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-    '.status.warn{color:#ffb454}',
-    '.logs{margin-top:6px;max-height:96px;overflow:auto;font-size:11px;color:#8f9bb3;',
-    ' border-top:1px solid rgba(255,255,255,.08);padding-top:5px}',
-    '.logs div{margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-    '.logs .warn{color:#ffb454}'
+    '.status{color:#94a3b8;font-size:11px;margin-bottom:6px;white-space:nowrap;overflow:hidden;',
+    ' text-overflow:ellipsis;padding:2px 0}',
+    '.status.warn{color:#fbbf24}',
+    '.logs{max-height:88px;overflow:auto;font-size:10.5px;color:#64748b;',
+    ' border-top:1px solid rgba(255,255,255,.06);padding-top:5px}',
+    '.logs div{margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
+    ' line-height:1.5}',
+    '.logs .warn{color:#fbbf24}',
+    '.logs .ok{color:#4ade80}'
   ].join('\n');
 
   function buildUI() {
@@ -500,17 +538,21 @@
       '<div class="head" data-drag>',
       '  <span class="dot"></span>',
       '  <span class="title">自动播放</span>',
-      '  <button class="btn-mini" title="收起">–</button>',
+      '  <span class="count" title="本次会话已刷视频数">0</span>',
+      '  <button class="btn-mini" title="收起 / 展开">–</button>',
       '</div>',
       '<div class="body">',
       '  <div class="row">',
-      '    <button class="btn-run on">运行中</button>',
+      '    <button class="btn-run on">▶ 运行中</button>',
+      '    <button class="btn-wander on" title="偶发暂停一小段，模拟真人">🎲</button>',
+      '    <button class="btn-reset" title="清零计数器">↺</button>',
       '    <span class="grow"></span>',
-      '    <button class="btn-wander on" title="偶发暂停一小段，让行为更像真人">随机停顿</button>',
       '  </div>',
-      '  <div class="kv"><span class="k">当前</span><span class="v cur">-</span></div>',
-      '  <div class="kv"><span class="k">进度</span><span class="v prog">-</span></div>',
-      '  <div class="kv"><span class="k">下一个</span><span class="v next">-</span></div>',
+      '  <div class="info">',
+      '    <div class="kv"><span class="k">当前</span><span class="v cur">-</span></div>',
+      '    <div class="kv"><span class="k">进度</span><span class="v prog">-</span></div>',
+      '    <div class="kv"><span class="k">下一个</span><span class="v next">-</span></div>',
+      '  </div>',
       '  <div class="status">准备中…</div>',
       '  <div class="logs"></div>',
       '</div>'
@@ -519,8 +561,10 @@
 
     els.panel = panel;
     els.dot = panel.querySelector('.dot');
+    els.count = panel.querySelector('.count');
     els.run = panel.querySelector('.btn-run');
     els.wander = panel.querySelector('.btn-wander');
+    els.reset = panel.querySelector('.btn-reset');
     els.cur = panel.querySelector('.cur');
     els.prog = panel.querySelector('.prog');
     els.next = panel.querySelector('.next');
@@ -552,6 +596,12 @@
       render();
     });
 
+    els.reset.addEventListener('click', function () {
+      resetCount();
+      log('计数器已清零');
+      updateUI();
+    });
+
     initDrag(panel, panel.querySelector('.head'));
 
     if (cfg.x != null && cfg.y != null) {
@@ -572,6 +622,8 @@
 
     handle.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
+      // 点在按钮上不触发拖拽，否则 setPointerCapture 会吞掉 click 事件
+      if (e.target && e.target.closest && e.target.closest('button')) return;
       var r = panel.getBoundingClientRect();
       bx = r.left; by = r.top;
       panel.style.left = bx + 'px';
@@ -606,6 +658,7 @@
     if (!els.logs) return;
     var d = document.createElement('div');
     if (level === 'warn') d.className = 'warn';
+    else if (level === 'ok') d.className = 'ok';
     var t = new Date();
     var hh = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
     d.textContent = hh + '  ' + msg;
@@ -625,9 +678,11 @@
   function render() {
     if (!els.panel) return;
     els.panel.classList.toggle('mini', !!cfg.collapsed);
-    els.run.textContent = cfg.running ? '运行中' : '已暂停';
+    els.run.textContent = cfg.running ? '▶ 运行中' : '⏸ 已暂停';
     els.run.classList.toggle('on', !!cfg.running);
     els.wander.classList.toggle('on', !!cfg.wander);
+    els.count.textContent = String(sessionCount);
+    els.count.classList.toggle('zero', sessionCount === 0);
     if (uiStatus) els.status.textContent = uiStatus;
   }
 
