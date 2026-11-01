@@ -24,7 +24,7 @@
   /* ============================ 配置 ============================ */
 
   var DEFAULTS = {
-    running: true,
+    running: false,          // 默认暂停，需手动启用
     threshold: 80,          // 完成阈值（%），播到这个百分比就切下一个
     // 进入页面后多久开始播（秒）
     startDelayMin: 3,
@@ -349,6 +349,7 @@
       return;
     }
     state.video = v;
+    setupVideoEvents(v);
 
     if (isFinished(v)) {
       await handleFinished('页面加载时已播完');

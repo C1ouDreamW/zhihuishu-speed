@@ -90,6 +90,7 @@
     slider.value = '60';
     slider.dispatchEvent(new Event('input', { bubbles: true }));
     check('滑块改回 60%', A.cfg.threshold === 60, '实际=' + A.cfg.threshold);
+    A.start();   // 手动启用（默认暂停）
   }, 300);
 
   // t=2s：开始播放
